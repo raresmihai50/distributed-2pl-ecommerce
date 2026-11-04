@@ -1,0 +1,46 @@
+services:
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: distr2pl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ecommerce_pg
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpassword
+    ports:
+      - "5433:5432"
+    command: postgres -c max_prepared_transactions=100 -c max_connections=200
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pguser -d ecommerce_pg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mysql-db:
+    image: mysql:8.0
+    container_name: distr2pl-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ecommerce_mysql
+      MYSQL_USER: mysqluser
+      MYSQL_PASSWORD: mysqlpassword
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3307:3306"
+    command: --max-connections=200 --transaction-isolation=READ-COMMITTED
+    volumes:
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  pg_data:
+  mysql_data:
+

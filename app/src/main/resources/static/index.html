@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed 2PL E-Commerce | Concurrency & 2PC Control Center</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-badge">2PL + 2PC</div>
+                <h1>Distributed E-Commerce</h1>
+                <p>PostgreSQL &bull; MySQL &bull; Strict 2PL</p>
+            </div>
+            <nav class="nav-menu">
+                <button class="nav-btn active" onclick="switchTab('dashboard')">1. Dashboard & Simulator</button>
+                <button class="nav-btn" onclick="switchTab('products')">2. Products (PG)</button>
+                <button class="nav-btn" onclick="switchTab('inventory')">3. Inventory (PG)</button>
+                <button class="nav-btn" onclick="switchTab('orders')">4. Orders (PG + MySQL)</button>
+                <button class="nav-btn" onclick="switchTab('payments')">5. Payments (MySQL)</button>
+                <button class="nav-btn" onclick="switchTab('transactions')">6. Transactions Monitor</button>
+                <button class="nav-btn" onclick="switchTab('locks')">7. Lock Manager Monitor</button>
+                <button class="nav-btn" onclick="switchTab('deadlocks')">8. Deadlock Monitor</button>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="btn btn-outline full-width" onclick="refreshAll()">&#x21bb; Refresh Live State</button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top KPI Bar -->
+            <header class="kpi-bar">
+                <div class="kpi-card">
+                    <span class="kpi-label">Active Transactions</span>
+                    <span class="kpi-value" id="kpi-active">0</span>
+                </div>
+                <div class="kpi-card kpi-success">
+                    <span class="kpi-label">Committed (2PC)</span>
+                    <span class="kpi-value" id="kpi-committed">0</span>
+                </div>
+                <div class="kpi-card kpi-danger">
+                    <span class="kpi-label">Aborted (UndoLog)</span>
+                    <span class="kpi-value" id="kpi-aborted">0</span>
+                </div>
+                <div class="kpi-card kpi-warning">
+                    <span class="kpi-label">Deadlocks Resolved</span>
+                    <span class="kpi-value" id="kpi-deadlocks">0</span>
+                </div>
+            </header>
+
+            <div id="notification-banner" class="notification hidden"></div>
+
+            <!-- SECTION 1: DASHBOARD -->
+            <section id="tab-dashboard" class="tab-section active">
+                <div class="section-header">
+                    <h2>Concurrency & Distributed Transaction Simulator</h2>
+                    <p>Launch multi-threaded scenarios to test Strict 2PL, Wait-For Graph Deadlock Detection, UndoLog Rollback, and 2PC Recovery.</p>
+                </div>
+
+                <div class="sim-grid">
+                    <div class="card sim-card">
+                        <h3>Race Condition: Last Item in Stock</h3>
+                        <p>Resets Product #4 stock to 1 and fires 2 concurrent transactions simultaneously. Strict 2PL ensures only 1 commits and stock never goes negative.</p>
+                        <button class="btn btn-primary" onclick="runRaceSimulation()">Run Last-Item Race (2 Threads)</button>
+                    </div>
+                    <div class="card sim-card">
+                        <h3>Deadlock Simulation (Wait-For Graph)</h3>
+                        <p>T1 locks Product #1 &rarr; requests #2. T2 locks Product #2 &rarr; requests #1. Detector finds cycle T1&rarr;T2&rarr;T1 and aborts youngest victim.</p>
+                        <button class="btn btn-warning" onclick="runDeadlockSimulation()">Simulate Deadlock (T1 &harr; T2)</button>
+                    </div>
+                    <div class="card sim-card">
+                        <h3>Distributed Rollback (Undo Log)</h3>
+                        <p>Executes updates in PostgreSQL (inventory, orders) and MySQL (order_items, payments), then forces an error to verify LIFO UndoLog restoration.</p>
+                        <button class="btn btn-danger" onclick="runRollbackSimulation()">Simulate Distributed Rollback</button>
+                    </div>
+                </div>
+
+                <div id="simulation-output" class="card code-box hidden"></div>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>Users (PostgreSQL: <code>users</code>)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>ID</th><th>Username</th><th>Full Name</th><th>Email</th><th>Balance</th></tr>
+                            </thead>
+                            <tbody id="users-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div class="card">
+                        <h3>Operation #1: Create User</h3>
+                        <form onsubmit="handleCreateUser(event)" class="form-stack">
+                            <input type="text" id="user-username" placeholder="Username (e.g. elena_v)" required>
+                            <input type="email" id="user-email" placeholder="Email (e.g. elena@student.ro)" required>
+                            <input type="text" id="user-fullname" placeholder="Full Name" required>
+                            <input type="number" step="0.01" id="user-balance" placeholder="Initial Balance (e.g. 2500.00)" value="2500.00" required>
+                            <button type="submit" class="btn btn-primary">Create User in PostgreSQL</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 2: PRODUCTS -->
+            <section id="tab-products" class="tab-section">
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>Products Catalog (PostgreSQL: <code>products</code>)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>ID</th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Update Price (Op #3)</th></tr>
+                            </thead>
+                            <tbody id="products-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div class="card">
+                        <h3>Operation #2: Add New Product</h3>
+                        <form onsubmit="handleCreateProduct(event)" class="form-stack">
+                            <input type="text" id="prod-name" placeholder="Product Name" required>
+                            <input type="text" id="prod-desc" placeholder="Description" required>
+                            <input type="text" id="prod-cat" placeholder="Category (e.g. Hardware)" value="Hardware" required>
+                            <input type="number" step="0.01" id="prod-price" placeholder="Price (e.g. 450.00)" required>
+                            <input type="number" id="prod-qty" placeholder="Initial Stock Quantity" value="10" required>
+                            <button type="submit" class="btn btn-primary">Add Product & Initialize Stock</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 3: INVENTORY -->
+            <section id="tab-inventory" class="tab-section">
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>Inventory Status (PostgreSQL: <code>inventory</code>)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Product ID</th><th>Product Name</th><th>Available Qty</th><th>Updated At</th><th>Action (Op #4)</th></tr>
+                            </thead>
+                            <tbody id="inventory-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div class="card">
+                        <h3>Operation #4: Check Stock (Strict 2PL S-Lock)</h3>
+                        <p>Acquires a <code>SHARED (S)</code> lock on <code>POSTGRESQL:products:{id}</code> and <code>POSTGRESQL:inventory:{id}</code> inside a managed transaction.</p>
+                        <div class="form-stack">
+                            <input type="number" id="check-stock-id" placeholder="Product ID (e.g. 1)" value="1">
+                            <button class="btn btn-primary" onclick="handleCheckStock()">Check Stock with S-Lock</button>
+                        </div>
+                        <div id="stock-check-result" class="code-box hidden" style="margin-top:12px;"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 4: ORDERS -->
+            <section id="tab-orders" class="tab-section">
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>Operation #5: Place Distributed Order (PG + MySQL)</h3>
+                        <form onsubmit="handlePlaceOrder(event)" class="form-stack">
+                            <label>User ID (PostgreSQL):</label>
+                            <input type="number" id="order-userid" value="1" required>
+                            <label>Product ID (PostgreSQL):</label>
+                            <input type="number" id="order-productid" value="1" required>
+                            <label>Quantity:</label>
+                            <input type="number" id="order-qty" value="1" min="1" required>
+                            <label>Payment Method (MySQL):</label>
+                            <select id="order-paymethod">
+                                <option value="CARD">CARD</option>
+                                <option value="BANK_TRANSFER">BANK_TRANSFER</option>
+                            </select>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="order-sim-fail">
+                                Simulate failure after PG & MySQL writes (Test UndoLog Rollback)
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="order-sim-2pc">
+                                Simulate MySQL Vote NO in 2PC Phase 1 (Test 2PC Abort)
+                            </label>
+                            <button type="submit" class="btn btn-primary">Execute Distributed Order (2PL + 2PC)</button>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <h3>Orders (PG: <code>orders</code> + MySQL: <code>order_items</code>)</h3>
+                        <p>Use buttons below each order to trigger Distributed Operations #6 (Process Payment), #7 (Cancel Order), and #8 (Refund & Restock).</p>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Order ID</th><th>User</th><th>Total</th><th>Status</th><th>Items (MySQL)</th><th>Distributed Actions</th></tr>
+                            </thead>
+                            <tbody id="orders-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 5: PAYMENTS -->
+            <section id="tab-payments" class="tab-section">
+                <div class="card">
+                    <h3>Payments Registry (MySQL: <code>payments</code>)</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Payment ID</th><th>Order ID</th><th>User ID</th><th>Amount</th><th>Method</th><th>Status</th><th>Distributed Tx ID</th><th>Created At</th></tr>
+                        </thead>
+                        <tbody id="payments-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- SECTION 6: TRANSACTIONS MONITOR -->
+            <section id="tab-transactions" class="tab-section">
+                <div class="section-header">
+                    <h2>Real-Time Distributed Transactions Monitor</h2>
+                    <p>Step-by-step inspection of SQL operations, Strict 2PL locks, Undo Log before-images, and 2PC phase states.</p>
+                </div>
+                <div id="transactions-list" class="tx-list"></div>
+            </section>
+
+            <!-- SECTION 7: LOCK MANAGER MONITOR -->
+            <section id="tab-locks" class="tab-section">
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>Active Locks Table (Strict 2PL Lock Manager)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Global Resource ID</th><th>Lock Type</th><th>Owner Transaction(s)</th><th>Granted At</th></tr>
+                            </thead>
+                            <tbody id="active-locks-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div class="card">
+                        <h3>Waiting Lock Requests Queue (FIFO)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Resource ID</th><th>Transaction ID</th><th>Requested Lock</th><th>Upgrade?</th><th>Requested At</th></tr>
+                            </thead>
+                            <tbody id="waiting-locks-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 8: DEADLOCK MONITOR -->
+            <section id="tab-deadlocks" class="tab-section">
+                <div class="section-header">
+                    <h2>Wait-For Graph & Deadlock Detector Monitor</h2>
+                    <button class="btn btn-warning" onclick="runDeadlockSimulation()">Trigger Deadlock Simulation Now</button>
+                </div>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>Active Wait-For Graph Edges (T<sub>waiter</sub> &rarr; T<sub>holder</sub>)</h3>
+                        <div id="wfg-container" class="code-box">No active wait-for edges.</div>
+                    </div>
+                    <div class="card">
+                        <h3>2PC Coordinator Recovery Reports</h3>
+                        <div id="recovery-container" class="code-box">No pending recovery events.</div>
+                    </div>
+                </div>
+                <div class="card" style="margin-top:16px;">
+                    <h3>Detected Deadlocks & Victim Resolution History</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Incident ID</th><th>Detected At</th><th>Wait-For Cycle</th><th>Conflicting Resource</th><th>Selected Victim</th><th>Strategy</th><th>Resolution</th></tr>
+                        </thead>
+                        <tbody id="deadlocks-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/app.js"></script>
+</body>
+</html>
+

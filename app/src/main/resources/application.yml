@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: distributed-2pl-ecommerce
+
+server:
+  port: 8080
+
+app:
+  datasource:
+    postgres:
+      url: ${POSTGRES_URL:jdbc:postgresql://localhost:5433/ecommerce_pg}
+      username: ${POSTGRES_USER:pguser}
+      password: ${POSTGRES_PASSWORD:pgpassword}
+      driver-class-name: org.postgresql.Driver
+    mysql:
+      url: ${MYSQL_URL:jdbc:mysql://localhost:3307/ecommerce_mysql?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC}
+      username: ${MYSQL_USER:mysqluser}
+      password: ${MYSQL_PASSWORD:mysqlpassword}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+  transaction:
+    lock-timeout-ms: 8000
+    deadlock-check-interval-ms: 100
+    coordinator-journal-path: ./target/coordinator-2pc-journal.log
+    initialize-schema: true
+
